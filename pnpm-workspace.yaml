@@ -1,0 +1,13 @@
+packages:
+  - "server"
+  # Future: "apps/*", "packages/*"
+
+# Build approval for native deps (pnpm) — adjust per environment policy
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
+  argon2: true
+  "@prisma/engines": true
+  prisma: true
+  esbuild: true
+  '@prisma/client': set this to true or false

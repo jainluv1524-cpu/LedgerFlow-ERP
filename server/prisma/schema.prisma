@@ -1,0 +1,362 @@
+// LedgerFlow — Prisma schema (foundation)
+// Phase 2/3 core: identity, tenancy, accounting primitives, audit.
+// Extend with sales/purchase/inventory/GST/banking modules in subsequent migrations.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  INVITED
+}
+
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum FinancialYearStatus {
+  OPEN
+  CLOSED
+}
+
+enum LedgerNature {
+  ASSET
+  LIABILITY
+  INCOME
+  EXPENSE
+  EQUITY
+}
+
+enum VoucherType {
+  CONTRA
+  PAYMENT
+  RECEIPT
+  JOURNAL
+  SALES
+  PURCHASE
+  DEBIT_NOTE
+  CREDIT_NOTE
+}
+
+enum VoucherStatus {
+  DRAFT
+  POSTED
+  CANCELLED
+  REVERSED
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  name         String
+  passwordHash String     @map("password_hash")
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  sessions           Session[]
+  loginHistory       LoginHistory[]
+  mfaDevices         MfaDevice[]
+  passwordResetTokens PasswordResetToken[]
+  companyUsers       CompanyUser[]
+  auditLogs          AuditLog[] @relation("AuditActor")
+
+  @@map("users")
+}
+
+model Session {
+  id         String        @id @default(uuid()) @db.Uuid
+  userId     String        @map("user_id") @db.Uuid
+  tokenHash  String        @unique @map("token_hash")
+  status     SessionStatus @default(ACTIVE)
+  ipAddress  String?       @map("ip_address")
+  userAgent  String?       @map("user_agent")
+  expiresAt  DateTime      @map("expires_at")
+  revokedAt  DateTime?     @map("revoked_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model LoginHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  email     String
+  success   Boolean
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([email, createdAt])
+  @@map("login_history")
+}
+
+model MfaDevice {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  type        String    @default("TOTP")
+  label       String?
+  secretEnc   String    @map("secret_enc")
+  verifiedAt  DateTime? @map("verified_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("mfa_devices")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  companyId   String?  @map("company_id") @db.Uuid
+  name        String
+  description String?
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  company         Company?         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+
+  @@unique([companyId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model Company {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  legalName String?  @map("legal_name")
+  country   String   @default("IN")
+  baseCurrency String @default("INR") @map("base_currency")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  roles           Role[]
+  companyUsers    CompanyUser[]
+  financialYears  FinancialYear[]
+  accountGroups   AccountGroup[]
+  ledgers         Ledger[]
+  vouchers        Voucher[]
+  auditLogs       AuditLog[]
+
+  @@map("companies")
+}
+
+model CompanyUser {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  isDefault Boolean  @default(false) @map("is_default")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles   UserRole[]
+
+  @@unique([companyId, userId])
+  @@index([userId])
+  @@map("company_users")
+}
+
+model UserRole {
+  companyUserId String @map("company_user_id") @db.Uuid
+  roleId        String @map("role_id") @db.Uuid
+
+  companyUser CompanyUser @relation(fields: [companyUserId], references: [id], onDelete: Cascade)
+  role        Role        @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([companyUserId, roleId])
+  @@map("user_roles")
+}
+
+model FinancialYear {
+  id        String              @id @default(uuid()) @db.Uuid
+  companyId String              @map("company_id") @db.Uuid
+  name      String
+  startDate DateTime            @map("start_date") @db.Date
+  endDate   DateTime            @map("end_date") @db.Date
+  status    FinancialYearStatus @default(OPEN)
+  closedAt  DateTime?           @map("closed_at")
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+
+  company  Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  vouchers Voucher[]
+
+  @@unique([companyId, name])
+  @@index([companyId, startDate, endDate])
+  @@map("financial_years")
+}
+
+model AccountGroup {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  parentId  String?  @map("parent_id") @db.Uuid
+  name      String
+  nature    LedgerNature
+  isSystem  Boolean  @default(false) @map("is_system")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  company  Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent   AccountGroup?  @relation("AccountGroupTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children AccountGroup[] @relation("AccountGroupTree")
+  ledgers  Ledger[]
+
+  @@unique([companyId, parentId, name])
+  @@index([companyId])
+  @@map("account_groups")
+}
+
+model Ledger {
+  id             String       @id @default(uuid()) @db.Uuid
+  companyId      String       @map("company_id") @db.Uuid
+  groupId        String       @map("group_id") @db.Uuid
+  name           String
+  code           String?
+  nature         LedgerNature
+  openingBalance Decimal      @default(0) @map("opening_balance") @db.Decimal(19, 4)
+  openingDrCr    String       @default("DR") @map("opening_dr_cr") // DR|CR
+  isSystem       Boolean      @default(false) @map("is_system")
+  isActive       Boolean      @default(true) @map("is_active")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  company Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  group   AccountGroup   @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  entries VoucherEntry[]
+
+  @@unique([companyId, name])
+  @@index([companyId, groupId])
+  @@index([companyId, isActive])
+  @@map("ledgers")
+}
+
+model Voucher {
+  id              String        @id @default(uuid()) @db.Uuid
+  companyId       String        @map("company_id") @db.Uuid
+  financialYearId String        @map("financial_year_id") @db.Uuid
+  voucherType     VoucherType   @map("voucher_type")
+  voucherNo       String        @map("voucher_no")
+  date            DateTime      @db.Date
+  narration       String?
+  reference       String?
+  status          VoucherStatus @default(DRAFT)
+  totalDebit      Decimal       @default(0) @map("total_debit") @db.Decimal(19, 4)
+  totalCredit     Decimal       @default(0) @map("total_credit") @db.Decimal(19, 4)
+  reversesId      String?       @unique @map("reverses_id") @db.Uuid
+  postedAt        DateTime?     @map("posted_at")
+  cancelledAt     DateTime?     @map("cancelled_at")
+  createdById     String?       @map("created_by_id") @db.Uuid
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  financialYear FinancialYear @relation(fields: [financialYearId], references: [id], onDelete: Restrict)
+  reverses      Voucher?      @relation("VoucherReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversedBy    Voucher?      @relation("VoucherReversal")
+  entries       VoucherEntry[]
+
+  @@unique([companyId, financialYearId, voucherType, voucherNo])
+  @@index([companyId, date])
+  @@index([companyId, voucherType, status])
+  @@map("vouchers")
+}
+
+model VoucherEntry {
+  id        String   @id @default(uuid()) @db.Uuid
+  voucherId String   @map("voucher_id") @db.Uuid
+  ledgerId  String   @map("ledger_id") @db.Uuid
+  debit     Decimal  @default(0) @db.Decimal(19, 4)
+  credit    Decimal  @default(0) @db.Decimal(19, 4)
+  narration String?
+  lineNo    Int      @default(0) @map("line_no")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  voucher Voucher @relation(fields: [voucherId], references: [id], onDelete: Cascade)
+  ledger  Ledger  @relation(fields: [ledgerId], references: [id], onDelete: Restrict)
+
+  @@index([voucherId])
+  @@index([ledgerId])
+  @@map("voucher_entries")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  companyId  String?  @map("company_id") @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  action     String
+  entityType String   @map("entity_type")
+  entityId   String?  @map("entity_id")
+  ipAddress  String?  @map("ip_address")
+  userAgent  String?  @map("user_agent")
+  before     Json?
+  after      Json?
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  company Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  actor   User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
