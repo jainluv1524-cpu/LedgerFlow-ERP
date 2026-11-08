@@ -36,3 +36,7 @@ export function scaledToString(scaled: bigint): string {
 export function isZero(scaled: bigint): boolean {
   return scaled === 0n;
 }
+
+export function negateScaled(scaled: bigint): bigint {
+  return -scaled;
+}

@@ -2,7 +2,8 @@ import { getPrisma } from "../../lib/prisma.js";
 import { HttpError } from "../../middleware/error-handler.js";
 import { scaledToString } from "./money.js";
 import { validatePostingEntries } from "./posting-validation.js";
-import type { PostVoucherInput } from "./schemas.js";
+import { buildReversalEntriesSwap } from "./reversal.js";
+import type { PostVoucherInput, ReverseVoucherInput } from "./schemas.js";
 
 type Tx = any; // Prisma.TransactionClient when client is generated
 
@@ -78,5 +79,73 @@ export async function postVoucher(companyId: string, actorUserId: string, input:
     });
 
     return voucher;
+  });
+}
+
+export async function reverseVoucher(companyId: string, actorUserId: string, voucherId: string, input: ReverseVoucherInput) {
+  const prisma = await getPrisma();
+  return prisma.$transaction(async (tx) => {
+    const original = await tx.voucher.findFirst({
+      where: { id: voucherId, companyId },
+      include: { entries: true, reversedBy: true },
+    });
+    if (!original) throw new HttpError(404, "VOUCHER_NOT_FOUND", "Voucher not found");
+    if (original.status !== "POSTED") throw new HttpError(409, "VOUCHER_NOT_REVERSIBLE", "Only posted vouchers can be reversed");
+    if (original.reversedBy) throw new HttpError(409, "ALREADY_REVERSED", "Voucher has already been reversed");
+
+    const fy = await tx.financialYear.findFirst({ where: { id: original.financialYearId, companyId } });
+    if (!fy || fy.status !== "OPEN") throw new HttpError(409, "FINANCIAL_YEAR_CLOSED", "Financial year is closed");
+    const date = new Date(`${input.date}T00:00:00.000Z`);
+    if (date < fy.startDate || date > fy.endDate) throw new HttpError(400, "DATE_OUTSIDE_FINANCIAL_YEAR", "Reversal date must be within the financial year");
+
+    const reversalEntries = buildReversalEntriesSwap(original.entries);
+    const validation = validatePostingEntries(reversalEntries);
+    if (!validation.ok) throw new HttpError(500, "REVERSAL_INVALID", "Generated reversal was not balanced");
+
+    const voucherNo = await nextVoucherNo(tx, companyId, original.financialYearId, original.voucherType);
+    const total = scaledToString(validation.totalDebitScaled);
+
+    const reversal = await tx.voucher.create({
+      data: {
+        companyId,
+        financialYearId: original.financialYearId,
+        voucherType: original.voucherType,
+        voucherNo,
+        date,
+        narration: input.narration ?? `Reversal of ${original.voucherNo}`,
+        reference: input.reference ?? original.id,
+        status: "POSTED",
+        totalDebit: total,
+        totalCredit: total,
+        reversesId: original.id,
+        postedAt: new Date(),
+        createdById: actorUserId,
+        entries: { create: reversalEntries.map((e, i) => ({ ledgerId: e.ledgerId, debit: e.debit as any, credit: e.credit as any, narration: e.narration, lineNo: i + 1 })) },
+      },
+      include: { entries: true },
+    });
+
+    await tx.voucher.update({ where: { id: original.id }, data: { status: "REVERSED" } });
+    await tx.auditLog.create({
+      data: { companyId, actorId: actorUserId, action: "VOUCHER_REVERSED", entityType: "Voucher", entityId: original.id, after: { reversalVoucherId: reversal.id, reversalNo: reversal.voucherNo } as any },
+    });
+    return reversal;
+  });
+}
+
+export async function getVoucher(companyId: string, voucherId: string) {
+  const prisma = await getPrisma();
+  const voucher = await prisma.voucher.findFirst({ where: { id: voucherId, companyId }, include: { entries: true, reversedBy: { select: { id: true, voucherNo: true } } } });
+  if (!voucher) throw new HttpError(404, "VOUCHER_NOT_FOUND", "Voucher not found");
+  return voucher;
+}
+
+export async function listVouchers(companyId: string, query: { financialYearId?: string; limit?: number }) {
+  const prisma = await getPrisma();
+  return prisma.voucher.findMany({
+    where: { companyId, ...(query.financialYearId ? { financialYearId: query.financialYearId } : {}) },
+    include: { entries: true },
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    take: Math.min(query.limit ?? 50, 200),
   });
 }

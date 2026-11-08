@@ -29,12 +29,19 @@
 - [ ] Swagger UI (optional dep) / richer OpenAPI schemas
 - [ ] Connect web app to API (authenticated flows)
 
-## Phase 3 — Core Accounting (next)
-- [ ] Posting engine: atomic DB transaction, `SUM(debit)=SUM(credit)` invariant, decimal arithmetic
-- [ ] Voucher numbering (company/FY/type scope), FY open/closed guards
-- [ ] Immutable `POSTED` vouchers; reversal/adjustment vouchers; cancellation audit
-- [ ] Chart of accounts/ledger CRUD with tenant scoping
-- [ ] Invariant tests (balanced/unbalanced, reversal, duplicates, cross-tenant isolation)
+## Phase 3 — Core Accounting (in progress)
+- [x] Double-entry validation engine (pure, 4dp fixed-scale checks): balanced totals, min 2 entries, debit XOR credit, non-negative, non-zero (`server/src/modules/accounting/*validation*`) — **7 tests**
+- [x] Reversal entry builder + invariant test (swap Dr/Cr, remains balanced) — **1 test**
+- [x] Posting service (DB, atomic): server-computed totals, ledger/FY/company validation, FY open + date range guards, voucher numbering (foundation), `POSTED` status, audit log (`VOUCHER_POSTED`)
+- [x] Reversal service (DB, atomic): only POSTED+not-already-reversed, generates balanced reversal, links `reversesId`, marks original `REVERSED`, audit log
+- [x] Voucher get/list services (tenant-scoped)
+- [x] COA foundations: account group + ledger create/list (tenant-scoped, membership-checked routes)
+- [x] API routes: `POST/GET /api/v1/companies/:companyId/vouchers`, `POST .../vouchers/:id/reverse`, `GET/POST .../account-groups`, `GET/POST .../ledgers` (auth + membership check)
+- [ ] Concurrency-safe voucher numbering (sequence table / advisory lock) + duplicate retry
+- [ ] Draft voucher lifecycle + controlled cancellation (audited)
+- [ ] Immutable-post guards on all update/delete paths (service + DB strategy)
+- [ ] Opening balances, FY close, cost centre/budget wiring
+- [ ] DB integration tests (migrated Postgres): posting, reversal, FY guards, membership isolation, duplicate numbers
 
 ## Phase 4–9
 - [ ] Business modules (sales/purchases/inventory/banking)

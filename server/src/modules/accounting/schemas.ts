@@ -18,3 +18,11 @@ export const postVoucherSchema = z.object({
 });
 
 export type PostVoucherInput = z.infer<typeof postVoucherSchema>;
+
+export const reverseVoucherSchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  narration: z.string().max(2000).optional(),
+  reference: z.string().max(200).optional(),
+});
+
+export type ReverseVoucherInput = z.infer<typeof reverseVoucherSchema>;
