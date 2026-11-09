@@ -22,7 +22,9 @@
 - [x] Tenant context middleware skeleton (`x-company-id`; **membership verification TODO**)
 - [x] OpenAPI stub: `GET /api/v1/openapi.json`
 - [x] Server tests passing without DB (6 tests): health/base/404, crypto, Argon2id
-- [ ] Run `docker compose up -d` and `pnpm --filter @ledgerflow/server prisma:migrate` (initial migration)
+- [x] Local Postgres (option 1) chosen for dev now; proper deployment setup deferred — `docs/setup/local-postgres.md`
+- [x] DB integration test harness added (gated by `DATABASE_URL` + `RUN_DB_TESTS=true`) — `server/src/integration/`
+- [ ] Install local PostgreSQL, create DB/user, set `server/.env`, run `prisma migrate dev --name init`
 - [ ] Verify DB connectivity via `/health` with `DATABASE_URL` set
 - [ ] CSRF hardening for cookie-authenticated unsafe requests
 - [ ] Company membership check in tenant middleware + integration tests
