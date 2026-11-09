@@ -360,3 +360,102 @@ model AuditLog {
   @@index([entityType, entityId])
   @@map("audit_logs")
 }
+
+model VoucherSequence {
+  id              String   @id @default(uuid()) @db.Uuid
+  companyId       String   @map("company_id") @db.Uuid
+  financialYearId String   @map("financial_year_id") @db.Uuid
+  voucherType     String   @map("voucher_type")
+  lastNumber      Int      @default(0) @map("last_number")
+  prefix          String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, financialYearId, voucherType])
+  @@index([companyId])
+  @@map("voucher_sequences")
+}
+
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  email     String?
+  phone     String?
+  gstin     String?
+  address   Json?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([companyId, name])
+  @@map("customers")
+}
+
+model Supplier {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  email     String?
+  phone     String?
+  gstin     String?
+  address   Json?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([companyId, name])
+  @@map("suppliers")
+}
+
+model Unit {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  symbol    String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@unique([companyId, name])
+  @@map("units")
+}
+
+model ProductCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  parentId  String?  @map("parent_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([companyId])
+  @@map("product_categories")
+}
+
+model Product {
+  id            String   @id @default(uuid()) @db.Uuid
+  companyId     String   @map("company_id") @db.Uuid
+  categoryId    String?  @map("category_id") @db.Uuid
+  unitId        String?  @map("unit_id") @db.Uuid
+  name          String
+  sku           String?
+  hsnSac        String?  @map("hsn_sac")
+  itemType      String   @default("GOODS") @map("item_type")
+  salePrice     Decimal  @default(0) @map("sale_price") @db.Decimal(19, 4)
+  purchasePrice Decimal  @default(0) @map("purchase_price") @db.Decimal(19, 4)
+  taxRate       Decimal  @default(0) @map("tax_rate") @db.Decimal(7, 4)
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  @@index([companyId, name])
+  @@index([companyId, sku])
+  @@map("products")
+}
+
+model Warehouse {
+  id        String   @id @default(uuid()) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  name      String
+  code      String?
+  address   Json?
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([companyId])
+  @@map("warehouses")
+}
