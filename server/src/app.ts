@@ -8,6 +8,8 @@ import { attachUser } from "./middleware/auth.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { accountingRouter } from "./modules/accounting/routes.js";
 import { authRouter } from "./modules/auth/routes.js";
+import { mastersRouter } from "./modules/masters/routes.js";
+import { reportsRouter } from "./modules/reports/routes.js";
 import { healthRouter } from "./routes/health.js";
 import { openApiHandler } from "./routes/openapi.js";
 
@@ -43,7 +45,7 @@ export function createApp() {
         name: "LedgerFlow API",
         version: "v1",
         status: "foundation",
-        modules: ["health", "auth", "openapi", "accounting"],
+        modules: ["health", "auth", "openapi", "accounting", "masters", "reports"],
         docs: env.ENABLE_SWAGGER ? `${env.API_BASE_PATH}/openapi.json` : null,
       },
     });
@@ -54,6 +56,8 @@ export function createApp() {
   }
   app.use(`${env.API_BASE_PATH}/auth`, authRouter);
   app.use(`${env.API_BASE_PATH}/companies/:companyId`, accountingRouter);
+  app.use(`${env.API_BASE_PATH}/companies/:companyId`, mastersRouter);
+  app.use(`${env.API_BASE_PATH}/companies/:companyId/reports`, reportsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

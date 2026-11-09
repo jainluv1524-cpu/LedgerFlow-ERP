@@ -4,7 +4,7 @@ import { HttpError } from "../../middleware/error-handler.js";
 import { assertCompanyMember } from "../tenancy/membership.js";
 import { createAccountGroup, createLedger, listAccountGroups, listLedgers } from "./coa-service.js";
 import { createAccountGroupSchema, createLedgerSchema } from "./coa-schemas.js";
-import { getVoucher, listVouchers, postVoucher, reverseVoucher } from "./posting-service.js";
+import { cancelDraftVoucher, createDraftVoucher, getVoucher, listVouchers, postVoucher, reverseVoucher } from "./posting-service.js";
 import { postVoucherSchema, reverseVoucherSchema } from "./schemas.js";
 
 export const accountingRouter = Router({ mergeParams: true });
@@ -14,15 +14,29 @@ accountingRouter.use(requireAuth);
 
 accountingRouter.post("/vouchers", async (req, res, next) => {
   try {
-    const companyId = req.params.companyId;
-    if (!companyId) throw new HttpError(400, "COMPANY_ID_REQUIRED", "companyId is required");
+    const companyId = req.params.companyId!;
     await assertCompanyMember(req.auth!.userId, companyId);
     const input = postVoucherSchema.parse(req.body);
     const voucher = await postVoucher(companyId, req.auth!.userId, input);
     res.status(201).json({ data: { voucher } });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post("/vouchers/draft", async (req, res, next) => {
+  try {
+    const companyId = req.params.companyId!;
+    await assertCompanyMember(req.auth!.userId, companyId);
+    const voucher = await createDraftVoucher(companyId, req.auth!.userId, postVoucherSchema.parse(req.body));
+    res.status(201).json({ data: { voucher } });
+  } catch (err) { next(err); }
+});
+
+accountingRouter.post("/vouchers/:voucherId/cancel", async (req, res, next) => {
+  try {
+    const companyId = req.params.companyId!;
+    await assertCompanyMember(req.auth!.userId, companyId);
+    res.json({ data: { voucher: await cancelDraftVoucher(companyId, req.auth!.userId, req.params.voucherId) } });
+  } catch (err) { next(err); }
 });
 
 accountingRouter.get("/vouchers/validate", (_req, res) => {
